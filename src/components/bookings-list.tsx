@@ -1,9 +1,18 @@
 'use client';
 
+import * as React from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useBookings } from '@/context/BookingsContext';
-import { Loader2, Calendar, Clock, Scissors, Phone, X } from 'lucide-react';
+import { useBookings } from '../context/BookingsContext';
+import { Loader2, Calendar, Clock, Scissors, Phone, X, AlertCircle, Trash2, Search } from 'lucide-react';
+import { BookingsFilter } from './bookings-filter';
+import { Pagination } from './pagination';
+import { DeleteConfirmation } from './delete-confirmation';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+
+const ITEMS_PER_PAGE = 5;
 
 const serviceIcons: { [key: string]: JSX.Element } = {
   haircut: <Scissors className="w-4 h-4" />,
@@ -19,88 +28,177 @@ const serviceNames: { [key: string]: string } = {
   treatment: 'Уход за волосами',
 };
 
+interface Booking {
+  id: string;
+  name: string;
+  phone: string;
+  service: string;
+  date: string;
+  time: string;
+}
+
 export function BookingsList() {
   const { bookings, deleteBooking, loading, error } = useBookings();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deleteBookingId, setDeleteBookingId] = useState<string | null>(null);
+  const [deleteBookingName, setDeleteBookingName] = useState<string>('');
+  const itemsPerPage = 10;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-      </div>
-    );
-  }
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((booking) => {
+      const searchString = searchQuery.toLowerCase();
+      return (
+        booking.name.toLowerCase().includes(searchString) ||
+        booking.phone.toLowerCase().includes(searchString) ||
+        booking.service.toLowerCase().includes(searchString) ||
+        booking.date.toLowerCase().includes(searchString) ||
+        booking.time.toLowerCase().includes(searchString)
+      );
+    });
+  }, [bookings, searchQuery]);
 
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-        Произошла ошибка при загрузке записей
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentBookings = filteredBookings.slice(startIndex, endIndex);
 
-  if (bookings.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <div className="inline-block p-3 bg-gray-50 rounded-full mb-4">
-          <Calendar className="w-6 h-6 text-gray-400" />
-        </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-1">Нет активных записей</h3>
-        <p className="text-gray-500">Записей на услуги пока нет</p>
-      </div>
-    );
-  }
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteBooking(id);
-    } catch (error) {
-      console.error('Error deleting booking:', error);
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteBookingId(id);
+    setDeleteBookingName(name);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteBookingId) {
+      try {
+        await deleteBooking(deleteBookingId);
+        setDeleteBookingId(null);
+        setDeleteBookingName('');
+      } catch (error) {
+        console.error('Error deleting booking:', error);
+      }
     }
   };
 
+  const handleDeleteCancel = () => {
+    setDeleteBookingId(null);
+    setDeleteBookingName('');
+  };
+
+  if (loading) {
+    return <div className="text-center p-4">Загрузка...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-500 p-4">Ошибка: {error}</div>;
+  }
+
   return (
     <div className="space-y-4">
-      {bookings.map((booking) => (
-        <div
-          key={booking.id}
-          className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm transition-all hover:shadow-md"
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-blue-50 rounded-full">
-                {serviceIcons[booking.service]}
-              </div>
-              <div>
-                <h3 className="font-medium text-gray-900">{booking.name}</h3>
-                <div className="mt-1 space-y-1">
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Phone className="w-4 h-4 mr-1.5" />
-                    {booking.phone}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Calendar className="w-4 h-4 mr-1.5" />
-                    {format(new Date(booking.date), 'd MMMM yyyy', { locale: ru })}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Clock className="w-4 h-4 mr-1.5" />
-                    {booking.time}
-                  </div>
-                  <div className="text-sm font-medium text-blue-600">
-                    {serviceNames[booking.service]}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => handleDelete(booking.id)}
-              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-              aria-label="Отменить запись"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <Input
+          type="text"
+          placeholder="Поиск по имени, телефону, услуге или дате..."
+          value={searchQuery}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            setSearchQuery(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="pl-10"
+        />
+      </div>
+
+      {currentBookings.length === 0 ? (
+        <div className="text-center p-4">
+          {searchQuery
+            ? 'Нет бронирований, соответствующих поисковому запросу'
+            : 'Нет бронирований'}
         </div>
-      ))}
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Имя
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Телефон
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Услуга
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Дата
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Время
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Действия
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentBookings.map((booking) => (
+                  <tr key={booking.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">{booking.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {booking.phone}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {booking.service}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {booking.date}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {booking.time}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteClick(booking.id, booking.name)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex justify-center space-x-2 mt-4">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <DeleteConfirmation
+        isOpen={deleteBookingId !== null}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        bookingName={deleteBookingName}
+      />
     </div>
   );
 } 

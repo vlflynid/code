@@ -10,6 +10,7 @@ interface Booking {
   service: string;
   date: string;
   time: string;
+  user_id: string;
 }
 
 interface BookingsContextType {
@@ -18,6 +19,7 @@ interface BookingsContextType {
   deleteBooking: (id: string) => Promise<void>;
   loading: boolean;
   error: string | null;
+  refreshBookings: () => Promise<void>;
 }
 
 const BookingsContext = createContext<BookingsContextType | undefined>(undefined);
@@ -26,6 +28,25 @@ export function BookingsProvider({ children }: { children: ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+      setBookings(data || []);
+      setError(null);
+    } catch (error: any) {
+      setError(error.message);
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchBookings();
@@ -51,22 +72,6 @@ export function BookingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const fetchBookings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .order('date', { ascending: true });
-
-      if (error) throw error;
-      setBookings(data || []);
-    } catch (error: any) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const addBooking = async (booking: Omit<Booking, 'id'>) => {
     try {
       const { data, error } = await supabase
@@ -76,8 +81,11 @@ export function BookingsProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) throw error;
-      setBookings([...bookings, data]);
+      
+      await fetchBookings(); // Обновляем список после добавления
+      return data;
     } catch (error: any) {
+      console.error('Error adding booking:', error);
       throw error;
     }
   };
@@ -90,14 +98,25 @@ export function BookingsProvider({ children }: { children: ReactNode }) {
         .eq('id', id);
 
       if (error) throw error;
-      setBookings(bookings.filter(booking => booking.id !== id));
+      
+      await fetchBookings(); // Обновляем список после удаления
     } catch (error: any) {
+      console.error('Error deleting booking:', error);
       throw error;
     }
   };
 
   return (
-    <BookingsContext.Provider value={{ bookings, addBooking, deleteBooking, loading, error }}>
+    <BookingsContext.Provider 
+      value={{ 
+        bookings, 
+        addBooking, 
+        deleteBooking, 
+        loading, 
+        error,
+        refreshBookings: fetchBookings
+      }}
+    >
       {children}
     </BookingsContext.Provider>
   );

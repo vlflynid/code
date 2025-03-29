@@ -1,24 +1,27 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/context/AuthContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "Salon Booking",
-  description: "Book your appointment at our salon",
+  title: "Салон красоты - Онлайн запись",
+  description: "Запишитесь онлайн в наш салон красоты",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body className={inter.className}>
-        <BookingsProvider>{children}</BookingsProvider>
+        <AuthProvider>
+          <BookingsProvider>{children}</BookingsProvider>
+        </AuthProvider>
       </body>
     </html>
   );
